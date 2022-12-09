@@ -1,12 +1,18 @@
 const http = require('http')
 const fs = require('fs')
 const path = require('path')
+const crypto = require('node:crypto')
 
 let port = process.argv[2] || 3000
 const httpServer = http.createServer(requestHandler)
 httpServer.listen(port, () => {
   console.log('server is listening on port ' + port)
 })
+
+process.on('uncaughtException', function (err) {
+  console.log('Caught exception: ' + err)
+})
+
 const uuid = () =>
   ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c) =>
     (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16)
@@ -17,80 +23,96 @@ function requestHandler(req, res) {
   res.setHeader('Access-Control-Request-Method', '*')
   res.setHeader('Access-Control-Allow-Methods', 'OPTIONS,GET,POST,PUT,DELETE')
   res.setHeader('Access-Control-Allow-Headers', '*')
-  if (req.url === '/') {
-    sendIndexHtml(res)
-  } else if (req.url === '/list') {
-    sendListOfUploadedFiles(res)
-  } else if (/\/download\/[^\/]+$/.test(req.url)) {
-    sendUploadedFile(req.url, res)
-  } else if (/\/upload\/[^\/]+$/.test(req.url)) {
-    saveUploadedFile(req, res)
-  } else {
-    sendInvalidRequest(res)
+  req.on('error', function (err) {
+    console.error(`request error ... ${error}`)
+  })
+  try {
+    res.statusCode = 200
+    if (req.url === '/') {
+      sendIndexHtml(req, res)
+    } else if (req.url === '/list') {
+      sendListOfUploadedFiles(req, res)
+    } else if (/\/download\/[^\/]+$/.test(req.url)) {
+      sendUploadedFile(req, res)
+    } else if (/\/upload\/[^\/]+$/.test(req.url)) {
+      saveUploadedFile(req, res)
+    } else {
+      sendInvalidRequest(req, res)
+    }
+  } catch (error) {
+    console.error(`catch error ... ${error}`)
   }
 }
 
-function sendIndexHtml(res) {
+function sendIndexHtml(req, res) {
   let indexFile = path.join(__dirname, 'index.html')
   fs.readFile(indexFile, (err, content) => {
     if (err) {
-      res.writeHead(404, { 'Content-Type': 'text' })
+      res.setHeader('Content-Type', 'text')
+      res.statusCode = 404
       res.write('File Not Found!')
-      res.end()
+      console.error(`File not found ${indexFile}`)
     } else {
-      res.writeHead(200, { 'Content-Type': 'text/html' })
+      res.setHeader('Content-Type', 'text/html')
       res.write(content)
-      res.end()
+      console.log('send index.html')
     }
-  })
-}
-
-function sendListOfUploadedFiles(res) {
-  let uploadDir = path.join(__dirname, 'download')
-  fs.readdir(uploadDir, (err, files) => {
-    if (err) {
-      console.log(err)
-      res.writeHead(400, { 'Content-Type': 'application/json' })
-      res.write(JSON.stringify(err.message))
-      res.end()
-    } else {
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.write(JSON.stringify(files))
-      res.end()
-    }
-  })
-}
-
-function sendUploadedFile(url, res) {
-  let file = path.join(__dirname, url)
-  fs.readFile(file, (err, content) => {
-    if (err) {
-      res.writeHead(404, { 'Content-Type': 'text' })
-      res.write('File Not Found!')
-      res.end()
-    } else {
-      res.writeHead(200, { 'Content-Type': 'application/octet-stream' })
-      res.write(content)
-      res.end()
-    }
-  })
-}
-
-function saveUploadedFile(req, res) {
-  console.log('saving uploaded file')
-  res.setHeader('ETag', uuid())
-  let fileName = path.basename(req.url)
-  let file = path.join(__dirname, 'download', fileName)
-  req.pipe(fs.createWriteStream(file))
-  req.on('end', () => {
-    res.writeHead(200, { 'Content-Type': 'text' })
-    res.write('uploaded succesfully')
     res.end()
   })
 }
 
-function sendInvalidRequest(res) {
-  res.writeHead(400, { 'Content-Type': 'application/json' })
+function sendListOfUploadedFiles(req, res) {
+  let uploadDir = path.join(__dirname, 'download')
+  fs.readdir(uploadDir, (err, files) => {
+    res.setHeader('Content-Type', 'application/json')
+    if (err) {
+      console.log(err)
+      res.statusCode = 400
+      res.write(JSON.stringify(err.message))
+      console.error(`Error send list ${err.message}`)
+    } else {
+      res.write(JSON.stringify(files))
+      console.log(`Send list files`)
+    }
+    res.end()
+  })
+}
+
+function sendUploadedFile(req, res) {
+  let file = path.join(__dirname, req.url)
+  fs.readFile(file, (err, content) => {
+    if (err) {
+      res.setHeader('Content-Type', 'text')
+      res.statusCode = 404
+      res.write('File Not Found!')
+      console.error(`Error send file ${file}`)
+    } else {
+      res.setHeader('Content-Type', 'application/octet-stream')
+      res.write(content)
+      console.log(`Send file ${file}`)
+    }
+    res.end()
+  })
+}
+
+function saveUploadedFile(req, res) {
+  let fileName = path.basename(req.url)
+  let file = path.join(__dirname, 'download', fileName)
+  console.log(`saving uploaded file ${fileName}`)
+  req.pipe(fs.createWriteStream(file))
+  req.on('end', () => {
+    res.setHeader('ETag', uuid())
+    res.setHeader('Content-Type', 'text')
+    res.write('uploaded succesfully')
+    res.end()
+    console.log(`    ...  ${fileName} Saved`)
+  })
+}
+
+function sendInvalidRequest(req, res) {
+  res.setHeader('Content-Type', 'application/json')
+  res.statusCode = 400
   res.write('Invalid Request')
   res.end()
+  console.error(`  !!!!   Invalid request    !!!!  ${req.url}`)
 }
