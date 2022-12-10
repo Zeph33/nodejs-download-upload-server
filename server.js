@@ -24,7 +24,7 @@ function requestHandler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'OPTIONS,GET,POST,PUT,DELETE')
   res.setHeader('Access-Control-Allow-Headers', '*')
   req.on('error', function (err) {
-    console.error(`request error ... ${error}`)
+    console.error(`request error ... ${err}`)
   })
   try {
     res.statusCode = 200
@@ -39,8 +39,8 @@ function requestHandler(req, res) {
     } else {
       sendInvalidRequest(req, res)
     }
-  } catch (error) {
-    console.error(`catch error ... ${error}`)
+  } catch (err) {
+    console.error(`catch error ... ${err}`)
   }
 }
 
@@ -98,14 +98,14 @@ function sendUploadedFile(req, res) {
 function saveUploadedFile(req, res) {
   let fileName = path.basename(req.url)
   let file = path.join(__dirname, 'download', fileName)
-  console.log(`saving uploaded file ${fileName}`)
+  console.log(`-- Start upload file ${fileName}`)
   req.pipe(fs.createWriteStream(file))
   req.on('end', () => {
     res.setHeader('ETag', uuid())
     res.setHeader('Content-Type', 'text')
     res.write('uploaded succesfully')
     res.end()
-    console.log(`    ...  ${fileName} Saved`)
+    console.log(`    ... Saved ... ${fileName}`)
   })
 }
 
