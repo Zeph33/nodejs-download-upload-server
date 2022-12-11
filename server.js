@@ -23,6 +23,8 @@ function requestHandler(req, res) {
   res.setHeader('Access-Control-Request-Method', '*')
   res.setHeader('Access-Control-Allow-Methods', 'OPTIONS,GET,POST,PUT,DELETE')
   res.setHeader('Access-Control-Allow-Headers', '*')
+  res.setHeader('Access-Control-Expose-Headers', '*')
+  
   req.on('error', function (err) {
     console.error(`request error ... ${err}`)
   })
