@@ -3,7 +3,7 @@ const fs = require('fs')
 const path = require('path')
 const crypto = require('node:crypto')
 
-let port = process.argv[2] || 3000
+let port = process.argv[2] || 4000
 const httpServer = http.createServer(requestHandler)
 httpServer.listen(port, () => {
   console.log('server is listening on port ' + port)
@@ -24,7 +24,7 @@ function requestHandler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'OPTIONS,GET,POST,PUT,DELETE')
   res.setHeader('Access-Control-Allow-Headers', '*')
   res.setHeader('Access-Control-Expose-Headers', '*')
-  
+
   req.on('error', function (err) {
     console.error(`request error ... ${err}`)
   })
@@ -34,10 +34,14 @@ function requestHandler(req, res) {
       sendIndexHtml(req, res)
     } else if (req.url === '/list') {
       sendListOfUploadedFiles(req, res)
-    } else if (/\/download\/[^\/]+$/.test(req.url)) {
+    } else if (/\/download\/.+$/.test(req.url)) {
       sendUploadedFile(req, res)
-    } else if (/\/upload\/[^\/]+$/.test(req.url)) {
+    } else if (/\/upload\/.+$/.test(req.url)) {
       saveUploadedFile(req, res)
+    } else if (/\/concat\/.+$/.test(req.url)) {
+      concatUploadedFile(req, res)
+    } else if (/\/tagurl\/.+$/.test(req.url)) {
+      tagUploadedFile(req, res)
     } else {
       sendInvalidRequest(req, res)
     }
@@ -97,9 +101,39 @@ function sendUploadedFile(req, res) {
   })
 }
 
+function concatUploadedFile(req, res) {
+  const fileName = path.basename(req.url)
+  const extName = path.extname(req.url)
+  const fileNameNoExt = path.basename(req.url, extName)
+  const dirName = path.dirname(req.url).slice(7) // /concat
+  const outputFilePath = path.join(__dirname, 'download', dirName, fileName)
+  console.log(`-- Start concat file ${outputFilePath}`)
+  const bufferArr = []
+  const filePathsArray = []
+  let idx = 0
+  while (true) {
+    const fileIdx = path.join(__dirname, 'download', dirName, `${fileNameNoExt}_${idx}${extName}`)
+    if (!fs.existsSync(fileIdx)) {
+      break
+    }
+    filePathsArray.push(fileIdx)
+    bufferArr.push(fs.readFileSync(fileIdx))
+    idx++
+  }
+  if (bufferArr.length === 0) return sendInvalidRequest(req, res)
+  fs.writeFileSync(outputFilePath, Buffer.concat(bufferArr))
+  filePathsArray.forEach((filePath) => fs.unlinkSync(filePath))
+  res.setHeader('Content-Type', 'application/json')
+  res.write(JSON.stringify({ fileName, concat: filePathsArray.length }))
+  console.log(`    ... End concat file ... ${outputFilePath}`)
+}
+
 function saveUploadedFile(req, res) {
-  let fileName = path.basename(req.url)
-  let file = path.join(__dirname, 'download', fileName)
+  const fileName = path.basename(req.url)
+  const dirName = path.dirname(req.url).slice(7) // /upload
+  const dir = path.join(__dirname, 'download', dirName)
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  const file = path.join(dir, fileName)
   console.log(`-- Start upload file ${fileName}`)
   req.pipe(fs.createWriteStream(file))
   req.on('end', () => {
@@ -109,6 +143,17 @@ function saveUploadedFile(req, res) {
     res.end()
     console.log(`    ... Saved ... ${fileName}`)
   })
+}
+
+function tagUploadedFile(req, res) {
+  const fileName = path.basename(req.url)
+  const dirName = path.dirname(req.url).slice(7) // /tagurl
+  const file = path.join(__dirname, 'download', dirName, fileName)
+  if (!fs.existsSync(file)) return sendInvalidRequest(req, res)
+  const stats = fs.statSync(file)
+  res.setHeader('Content-Type', 'application/json')
+  res.write(JSON.stringify({ url: `http://localhost:${port}/${path.join('download', dirName)}/${fileName}`, size: stats.size }))
+  res.end()
 }
 
 function sendInvalidRequest(req, res) {
