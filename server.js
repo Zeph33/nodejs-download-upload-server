@@ -42,6 +42,8 @@ function requestHandler(req, res) {
       concatUploadedFile(req, res)
     } else if (/\/tagurl\/.+$/.test(req.url)) {
       tagUploadedFile(req, res)
+    } else if (/\/delete\/.+$/.test(req.url)) {
+      deleteFile(req, res)
     } else {
       sendInvalidRequest(req, res)
     }
@@ -154,6 +156,20 @@ function tagUploadedFile(req, res) {
   res.setHeader('Content-Type', 'application/json')
   res.write(JSON.stringify({ url: `http://localhost:${port}/${path.join('download', dirName)}/${fileName}`, size: stats.size }))
   res.end()
+  console.log(`-- Send upload file url ${dirName}/${fileName}`)
+}
+
+function deleteFile(req, res) {
+  const fileName = path.basename(req.url)
+  const dirName = path.dirname(req.url).slice(7) // /delete
+  const file = path.join(__dirname, 'download', dirName, fileName)
+  if (!fs.existsSync(file)) return sendInvalidRequest(req, res)
+  const stats = fs.statSync(file)
+  fs.unlinkSync(file)
+  res.setHeader('Content-Type', 'application/json')
+  res.write(JSON.stringify({ delete: `${dirName}/${fileName}`, size: stats.size }))
+  res.end()
+  console.log(`-- Delete file ${dirName}/${fileName}`)
 }
 
 function sendInvalidRequest(req, res) {
